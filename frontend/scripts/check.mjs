@@ -12,93 +12,87 @@ let errors = 0
 let warnings = 0
 const err = (where, msg) => { errors++; console.log(`  ERROR   ${where}: ${msg}`) }
 const warn = (where, msg) => { warnings++; console.log(`  warning ${where}: ${msg}`) }
+const note = (msg) => console.log(`  note    ${msg}`)
 
-console.log('Checking config.js ...')
-const need = ['title', 'player', 'enemies', 'collectible', 'powerUp', 'goal', 'themes']
-for (const k of need) if (config[k] === undefined) err('config', `missing '${k}'`)
-if (String(config.title).includes('__TITLE__')) warn('config', 'title is still the placeholder')
-const shapes = ['coin', 'gem', 'star', 'heart', 'leaf']
-const fallbacks = ['player', 'aphid', 'mite', 'moth']
-const backgrounds = ['hills', 'cave', 'sunset', 'night']
-const decorations = ['bush', 'plant', 'rock', 'none']
 const hex = (c) => typeof c === 'string' && /^#[0-9a-fA-F]{6}$/.test(c)
 const checkColors = (where, arr, n) => {
   if (!Array.isArray(arr) || arr.length < n) return err(where, `needs ${n} colors`)
   arr.forEach((c) => !hex(c) && err(where, `'${c}' is not a color like '#3fa34d'`))
 }
-const checkSprite = (where, spec) => {
-  if (!fallbacks.includes(spec.fallback)) err(where, `fallback must be one of ${fallbacks.join(', ')}`)
-  if (!spec.sprite) return warn(where, 'no sprite set, using built-in art')
-  const json = join(root, 'public', 'sprites', spec.sprite, `${spec.sprite}.json`)
-  if (!existsSync(json)) warn(where, `sprite '${spec.sprite}' not generated yet (no public/sprites/${spec.sprite}/${spec.sprite}.json), using built-in art`)
-  else {
-    const rep = join(root, 'public', 'sprites', spec.sprite, 'report.json')
-    if (existsSync(rep)) {
-      const r = JSON.parse(readFileSync(rep, 'utf8'))
-      if (r.issues && r.issues.length) warn(where, `sprite '${spec.sprite}' has reported issues: ${r.issues.join('; ')}`)
-    }
-  }
+const spriteDir = (name) => join(root, 'public', 'sprites', name)
+const hasSprite = (name) => existsSync(join(spriteDir(name), `${name}.json`))
+const spriteIssues = (where, name) => {
+  const rep = join(spriteDir(name), 'report.json')
+  if (!existsSync(rep)) return
+  const r = JSON.parse(readFileSync(rep, 'utf8'))
+  if (r.issues && r.issues.length) warn(where, `sprite '${name}' has reported issues: ${r.issues.join('; ')}`)
 }
-checkSprite('config.player', config.player)
-const behaviors = ['walk', 'hop', 'fly']
-for (const [k, e] of Object.entries(config.enemies || {})) {
-  if (!/^[a-z][a-z0-9_]*$/.test(k)) err(`config.enemies.${k}`, 'enemy keys must be lowercase letters/numbers/_')
-  if (!behaviors.includes(e.behavior)) err(`config.enemies.${k}`, `behavior must be one of ${behaviors.join(', ')}`)
-  if (typeof e.speed !== 'number' || e.speed < 0.1 || e.speed > 1.5) warn(`config.enemies.${k}`, 'speed should be between 0.3 and 1.0')
-  checkSprite(`config.enemies.${k}`, e)
-}
-for (const k of ['collectible', 'powerUp']) {
-  const it = config[k] || {}
-  if (!shapes.includes(it.shape)) err(`config.${k}`, `shape must be one of ${shapes.join(', ')}`)
-  for (const c of ['dark', 'light']) if (!hex(it.colors?.[c])) err(`config.${k}.colors.${c}`, 'needs a color like #ffd84d')
-}
-if (!['castle', 'house', 'greenhouse'].includes(config.goal?.building)) err('config.goal', "building must be 'castle', 'house' or 'greenhouse'")
-;(config.themes || []).forEach((t, i) => {
-  const w = `config.themes[${i}]`
-  if (!backgrounds.includes(t.background)) err(w, `background must be one of ${backgrounds.join(', ')}`)
-  if (!decorations.includes(t.decoration)) err(w, `decoration must be one of ${decorations.join(', ')}`)
-  checkColors(`${w}.sky`, t.sky, 1)
-  for (const k of ['far', 'near']) checkColors(`${w}.${k}`, t[k], 2)
-  checkColors(`${w}.decorationColors`, t.decorationColors, 3)
-  for (const k of ['grass', 'dirt', 'brick', 'stone', 'block']) checkColors(`${w}.${k}`, t[k], 3)
-  checkColors(`${w}.pipe`, t.pipe, 4)
+
+console.log('Checking config.js ...')
+for (const k of ['title', 'cats', 'planets', 'coins', 'powerUp']) if (config[k] === undefined) err('config', `missing '${k}'`)
+if (!['coin', 'gem', 'star', 'heart', 'leaf'].includes(config.coins?.shape)) err('config.coins', 'shape must be coin, gem, star, heart or leaf')
+for (const c of ['dark', 'light', 'mid']) if (!hex(config.coins?.colors?.[c])) err(`config.coins.colors.${c}`, 'needs a color like #ffd84d')
+
+// cats
+if (!Array.isArray(config.cats) || config.cats.length < 2) err('config.cats', 'needs at least 2 cats (2 players pick different ones)')
+;(config.cats || []).forEach((c, i) => {
+  const w = `config.cats[${i}]`
+  if (!c.name) err(w, 'missing name')
+  if (!hex(c.color)) err(w, `color '${c.color}' is not like '#ff9a3c'`)
+  if (!c.sprite) err(w, 'missing sprite')
+  else if (!hasSprite(c.sprite)) warn(w, `sprite '${c.sprite}' not found in public/sprites, using built-in art`)
+  else spriteIssues(w, c.sprite)
 })
 
-// Things still at the kit's default values: the game isn't themed yet
-const DEFAULTS = {
-  subtitle: 'A PLATFORM ADVENTURE',
-  story: 'MONSTERS STOLE THE TREASURE.',
-  winText: 'YOU DID IT!',
-  playerName: 'HERO',
-  enemyNames: ['GRUB', 'HOPPER', 'FLAPPER'],
-  levelNames: ['GREEN HILLS', 'DEEP CAVE', 'SUNSET PEAKS'],
-  sky0: '#5fb7ff', sky1: '#140d22', sky2: '#2b1b4a', grass: '#9be564',
-}
-const theme = (msg) => warn('theme', msg + ' (still the kit default: change it to fit this game)')
-if (config.subtitle === DEFAULTS.subtitle) theme('config.subtitle')
-if ((config.story || [])[0] === DEFAULTS.story) theme('config.story')
-if ((config.winText || [])[0] === DEFAULTS.winText) theme('config.winText')
-if (config.player?.name === DEFAULTS.playerName) theme('config.player.name')
-for (const [k, e] of Object.entries(config.enemies || {})) if (DEFAULTS.enemyNames.includes(e.name)) theme(`config.enemies.${k}.name '${e.name}'`)
-if (config.collectible?.name === 'COINS' && config.collectible?.shape !== 'coin') warn('theme', `config.collectible.name is 'COINS' but the shape is '${config.collectible.shape}'`)
-const t = config.themes || []
-if (t[0]?.sky?.[0] === DEFAULTS.sky0 && t[0]?.grass?.[0] === DEFAULTS.grass) theme('config.themes[0] colors')
-if (t[1]?.sky?.[0] === DEFAULTS.sky1 && t[1]?.background === 'cave') theme('config.themes[1] colors')
-if (t[2]?.sky?.[0] === DEFAULTS.sky2 && t[2]?.background === 'sunset') theme('config.themes[2] colors')
-LEVELS.forEach((d, i) => DEFAULTS.levelNames.includes(d.name) && theme(`level name '${d.name}' in LEVELS (levels.js)`))
+// planets
+const kinds = ['earth', 'moons', 'aurora', 'ringed', 'asteroids', 'station', 'sun', 'clouds', 'galaxy', 'ship']
+const lands = ['craters', 'dunes', 'peaks', 'spires', 'crystals', 'none']
+const terrains = ['craters', 'sand', 'ice', 'moss', 'rock', 'metal', 'basalt', 'cloud', 'crystal', 'hull']
+const decors = ['antenna', 'crystal', 'mushroom', 'rock', 'vent', 'dish', 'icicle', 'none']
+let generated = 0
+let recolored = 0
+;(config.planets || []).forEach((p, i) => {
+  const w = `config.planets[${i}] (${p.name})`
+  if (!p.name) err(w, 'missing name')
+  if (typeof p.gravity !== 'number' || p.gravity < 0.5 || p.gravity > 1.2) err(w, 'gravity must be a number from 0.5 to 1.2')
+  checkColors(`${w}.sky`, p.sky, 1)
+  if (!kinds.includes(p.planet?.kind)) err(w, `planet.kind must be one of ${kinds.join(', ')}`)
+  if (!lands.includes(p.land?.style)) err(w, `land.style must be one of ${lands.join(', ')}`)
+  if (!terrains.includes(p.terrain)) err(w, `terrain must be one of ${terrains.join(', ')}`)
+  if (!decors.includes(p.decor)) err(w, `decor must be one of ${decors.join(', ')}`)
+  for (const k of ['surface', 'ground', 'panel', 'block']) checkColors(`${w}.${k}`, p[k], 3)
+  checkColors(`${w}.tube`, p.tube, 4)
+  for (const role of ['walker', 'hopper', 'flyer']) {
+    const e = p.enemies?.[role]
+    const we = `${w}.enemies.${role}`
+    if (!e) {
+      err(we, 'missing')
+      continue
+    }
+    if (!e.name) err(we, 'missing name')
+    if (typeof e.speed !== 'number' || e.speed < 0.1 || e.speed > 1.5) warn(we, 'speed should be between 0.3 and 1.0')
+    if (e.sprite && hasSprite(e.sprite)) {
+      generated++
+      spriteIssues(we, e.sprite)
+    } else if (e.base && hasSprite(e.base)) recolored++
+    else warn(we, `neither sprite '${e.sprite}' nor base '${e.base}' found, using built-in art`)
+  }
+})
+if (recolored) note(`${recolored} alien(s) use a recolored base sprite until generated (run tools\\generate-aliens.bat)`)
 
 console.log(`Checking ${LEVELS.length} levels ...`)
 if (LEVELS.length < 1) err('levels', 'LEVELS is empty')
 LEVELS.forEach((def, i) => {
-  const where = `level ${i + 1} (${def.name})`
-  if ((def.theme ?? i) >= (config.themes || []).length) err(where, `theme ${def.theme} doesn't exist in config.themes`)
+  const planet = (config.planets || [])[def.planet]
+  const where = `level ${i + 1} (${planet?.name ?? '?'})`
+  if (!planet) return err(where, `planet ${def.planet} doesn't exist in config.planets`)
   let L
   try {
     L = def.build()
   } catch (e) {
     return err(where, `crashed while building: ${e.message}`)
   }
-  const r = validateLevel(L, config.enemies || {})
+  const r = validateLevel(L, planet)
   r.errors.forEach((m) => err(where, m))
   r.warnings.forEach((m) => warn(where, m))
 })
@@ -108,5 +102,4 @@ if (errors) {
   console.log('Fix the errors above, then run `npm run check` again.')
   process.exit(1)
 }
-if (warnings) console.log('Content OK, but look at the warnings above (especially "theme" ones). Building...')
-else console.log('Content OK. Building...')
+console.log(warnings ? 'Content OK, but look at the warnings above. Building...' : 'Content OK. Building...')

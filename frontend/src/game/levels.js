@@ -1,26 +1,33 @@
 // ============================================================================
-//  LEVELS: the second file to edit when making a new game.
+//  SPACE CATS levels: one per planet (see config.planets).
 //
-//  The map is 14 tiles tall. Rows go from 0 (top of the screen) to 13 (bottom).
-//  The ground is rows 12-13. Something standing on the ground sits on row 11.
-//  The player is about 2 tiles tall and jumps about 4 tiles high (5 with a run-up).
+//  The map is 14 tiles tall: row 0 is the top, the ground is rows 12-13.
+//  Something standing on the ground sits on row 11. Cats are ~1.5 tiles tall
+//  and jump about 4 rows high (more in low gravity, much more from a bounce pad).
 //
-//  BUILDER COMMANDS (x = column, y = row; all chainable: L.ground(0, 40).pipe(20, 2)):
-//    L.ground(x0, x1)            solid ground from column x0 to x1. Leave gaps for pits (max 4 wide).
-//    L.blocks(x, y, 'B?BPB')     a row of blocks starting at (x, y): B brick, ? item block, P power-up block,
-//                                S stone, space = nothing. Put item blocks at row 8 (or row 4 above other blocks).
-//    L.row(x0, x1, y, 'S')       a horizontal line of one block type (platforms, bridges).
-//    L.pipe(x, h)                a 2-wide pipe of height h (2-4) standing on the ground.
-//    L.stairs(x, n, dir)         a staircase n steps high; dir 1 = going up, -1 = going down.
-//    L.coins(x0, x1, y)          a row of collectibles in the air at row y.
-//    L.enemy(type, x, y)         an enemy; type is a key from config.enemies. y defaults to 11 (on the ground).
-//                                Flying enemies need a y in the air (3-7).
-//    L.decorate(x1, x2, ...)     background decorations standing on the ground at these columns.
-//    L.checkpoint = x            respawn point after dying (must be above ground).
-//    L.finish(x)                 REQUIRED, last: final staircase at x, then flag and goal building.
-//                                Needs the level width to be at least x + 26.
+//  BUILDER COMMANDS (all chainable):
+//    L.ground(x0, x1)          solid ground, rows 12-13
+//    L.island(x0, x1, y)       floating ground, 2 rows thick starting at row y
+//    L.blocks(x, y, 'B?BP')    B panel, ? star block, P power-up block, S solid block, C crumbling, J bounce pad
+//    L.row(x0, x1, y, ch)      a line of one tile type
+//    L.crumble(x0, x1, y)      platforms that fall a moment after you step on them (they come back)
+//    L.pad(x, y = 11)          bounce pad (launches about 7 rows up)
+//    L.belt(x0, x1, y, dir)    conveyor belt, dir -1 pushes left, 1 pushes right
+//    L.cloud(x0, x1, y)        jump-through platform: solid from above only
+//    L.lava(x0, x1)            deadly pool (lava / goo / plasma, colored per planet)
+//    L.pipe(x, h)              2-wide tube standing on the ground
+//    L.stairs(x, n, dir)       staircase, dir 1 up / -1 down
+//    L.mover(x, y, w, axis, range, speed)   moving platform w tiles wide, moving `range` tiles
+//                              along 'x' (right) or 'y' (up) and back
+//    L.meteors(x0, x1)         meteors fall from the sky while the cats are in this stretch
+//    L.wind(x0, x1, force)     wind pushes cats (positive = right)
+//    L.coins(x0, x1, y)        a row of stars; L.arc(x, y, n) an arc of n stars
+//    L.enemy(role, x, y)       role: 'walker' | 'hopper' | 'flyer' (flyers need y 3-7)
+//    L.decorate(x...)          background props on the ground
+//    L.checkpoint = x          respawn column after losing a life
+//    L.finish(x)               REQUIRED: landing pad from x to x+8 with the rocket at x+2
 //
-//  After editing, run `npm run check` in the frontend folder and fix everything it reports.
+//  The rocket drops the cats off at the start (columns 0-6 must be flat ground, nothing above).
 // ============================================================================
 
 export const ROWS = 14
@@ -33,11 +40,14 @@ export function createLevel(width) {
     width,
     tiles,
     entities: [],
+    movers: [],
+    meteorZones: [],
+    windZones: [],
     decorations: [],
-    start: { x: 3, y: GROUND - 1 },
+    start: { x: 4, y: GROUND - 1 },
+    rocketStartX: 1,
     checkpoint: null,
-    flagX: 0,
-    houseX: 0,
+    rocketX: 0,
     set(x, y, ch) {
       if (x >= 0 && x < width && y >= 0 && y < ROWS) tiles[y][x] = ch
       return L
@@ -46,12 +56,32 @@ export function createLevel(width) {
       for (let x = x0; x <= x1; x++) L.set(x, GROUND, '#').set(x, GROUND + 1, '#')
       return L
     },
+    island(x0, x1, y) {
+      for (let x = x0; x <= x1; x++) L.set(x, y, '#').set(x, y + 1, '#')
+      return L
+    },
     row(x0, x1, y, ch) {
       for (let x = x0; x <= x1; x++) L.set(x, y, ch)
       return L
     },
     blocks(x, y, pattern) {
       ;[...pattern].forEach((ch, i) => ch !== ' ' && L.set(x + i, y, ch))
+      return L
+    },
+    crumble(x0, x1, y) {
+      return L.row(x0, x1, y, 'C')
+    },
+    pad(x, y = GROUND - 1) {
+      return L.set(x, y, 'J')
+    },
+    belt(x0, x1, y, dir) {
+      return L.row(x0, x1, y, dir < 0 ? '<' : '>')
+    },
+    cloud(x0, x1, y) {
+      return L.row(x0, x1, y, '=')
+    },
+    lava(x0, x1) {
+      for (let x = x0; x <= x1; x++) L.set(x, GROUND, 'L').set(x, GROUND + 1, 'L')
       return L
     },
     pipe(x, h) {
@@ -67,227 +97,352 @@ export function createLevel(width) {
       }
       return L
     },
+    mover(x, y, w, axis, range, speed = 0.6) {
+      L.movers.push({ x, y, w, axis, range, speed })
+      return L
+    },
+    meteors(x0, x1) {
+      L.meteorZones.push([x0, x1])
+      return L
+    },
+    wind(x0, x1, force) {
+      L.windZones.push([x0, x1, force])
+      return L
+    },
     coins(x0, x1, y) {
       for (let x = x0; x <= x1; x++) L.entities.push({ type: 'coin', x, y })
       return L
     },
-    enemy(type, x, y = GROUND - 1) {
-      L.entities.push({ type: 'enemy', kind: type, x, y })
+    arc(x, y, n) {
+      for (let i = 0; i < n; i++) {
+        const t = (i / Math.max(1, n - 1)) * 2 - 1
+        L.entities.push({ type: 'coin', x: x + i, y: y + Math.round(t * t * 2) })
+      }
+      return L
+    },
+    enemy(role, x, y = GROUND - 1) {
+      L.entities.push({ type: 'enemy', kind: role, x, y })
       return L
     },
     decorate(...xs) {
       L.decorations.push(...xs)
       return L
     },
-    finish(stairsX) {
-      L.stairs(stairsX, 8)
-      L.flagX = stairsX + 8 + 4
-      L.set(L.flagX, GROUND - 1, 'S')
-      L.houseX = L.flagX + 5
+    finish(x) {
+      L.ground(x, x + 8)
+      for (let cx = x; cx <= x + 8; cx++) for (let y = 0; y < GROUND; y++) L.set(cx, y, '.')
+      L.rocketX = x + 2
       return L
     },
   }
   return L
 }
 
-// ---------------------------------------------------------------- the levels
-
-function level1() {
+// ---------------------------------------------------------------- 1. LUNA BASE: low gravity
+function luna() {
   const L = createLevel(200)
-  L.ground(0, 30).ground(35, 60).ground(65, 90).ground(95, 120).ground(125, 150).ground(155, 200)
-  L.decorate(5, 15, 38, 50, 75, 90, 110, 130, 155, 175)
-
-  // Level 1: Green Hills
-  L.blocks(10, 8, '?')
-  L.coins(12, 14, 6)
-  L.enemy('walker', 16)
-  
-  L.blocks(22, 8, 'B?BPB')
-  L.enemy('walker', 25).enemy('hopper', 30)
-  L.coins(24, 27, 7)
-
-  L.pipe(38, 2).pipe(45, 3)
-  L.blocks(46, 8, 'BB')
-  L.enemy('walker', 48).enemy('hopper', 52)
-  L.coins(40, 43, 6)
-
-  L.checkpoint = 60
-
-  L.blocks(70, 8, '?').blocks(75, 8, 'B?B')
-  L.enemy('walker', 78).enemy('hopper', 85)
-  L.coins(72, 74, 6)
-
-  L.stairs(90, 3).stairs(95, 3, -1)
-  L.blocks(100, 8, 'B?PB')
-  L.enemy('walker', 103).enemy('hopper', 108)
-  L.coins(102, 107, 7)
-
-  L.pipe(115, 2).pipe(122, 3)
-  L.blocks(130, 8, 'BB')
-  L.enemy('walker', 133).enemy('hopper', 140)
-  L.coins(135, 138, 6)
-
-  L.finish(160)
+  L.ground(0, 22).ground(29, 48).ground(55, 71).ground(78, 100).ground(107, 130).ground(137, 160).ground(166, 199)
+  L.decorate(8, 36, 62, 90, 118, 150, 170)
+  L.blocks(11, 8, '?P?')
+  L.arc(23, 6, 6)
+  L.row(33, 37, 6, 'B').coins(33, 37, 5)
+  L.enemy('walker', 42).enemy('hopper', 60)
+  L.arc(49, 5, 6)
+  L.row(62, 64, 7, 'S').row(67, 69, 4, 'S').coins(67, 69, 3)
+  L.arc(72, 6, 6)
+  L.row(84, 87, 7, 'S').row(91, 94, 4, 'S').coins(91, 94, 3)
+  L.enemy('walker', 88).enemy('flyer', 97, 6)
+  L.checkpoint = 109
+  L.blocks(112, 8, 'B?B?B').blocks(114, 4, 'P')
+  L.enemy('walker', 120).enemy('hopper', 125)
+  L.arc(131, 5, 6)
+  L.row(140, 142, 8, 'B').row(145, 147, 5, 'B').row(150, 152, 2, 'B').coins(150, 152, 1)
+  L.enemy('flyer', 145, 3).enemy('walker', 155)
+  L.arc(161, 6, 5)
+  L.enemy('hopper', 172).enemy('walker', 176)
+  L.finish(184)
   return L
 }
 
-function level2() {
-  const L = createLevel(220)
-  L.ground(0, 40).ground(45, 70).ground(75, 90).ground(95, 110).ground(115, 140).ground(145, 220)
-  L.row(10, 210, 0, 'B').row(10, 210, 1, 'B') // cave ceiling
-  L.decorate(5, 20, 45, 70, 95, 120, 145)
-
-  // Level 2: Deep Cave  
-  L.blocks(12, 8, 'P???B')
-  L.coins(13, 16, 11)
-  L.enemy('walker', 18).enemy('hopper', 25)
-  
-  L.row(25, 35, 8, 'B').blocks(30, 8, '?')
-  L.enemy('walker', 38).enemy('hopper', 48)
-  L.coins(32, 34, 6)
-
-  L.pipe(50, 3)
-  L.blocks(55, 8, 'B?B')
-  L.enemy('walker', 59)
-  L.coins(58, 60, 7)
-
-  L.checkpoint = 75  
-
-  L.row(80, 90, 8, 'B').blocks(85, 8, 'P')
-  L.enemy('walker', 88).enemy('hopper', 98)
-  L.blocks(95, 8, 'B?B?B')
-  L.coins(98, 100, 7)
-
-  L.stairs(110, 3).stairs(115, 3, -1)
-  L.blocks(120, 8, 'BBP')
-  L.enemy('walker', 123).enemy('hopper', 130)
-  L.coins(125, 127, 6)
-
-  L.pipe(140, 2).pipe(147, 3)
-  L.blocks(155, 8, 'B?BP')
-  L.enemy('walker', 158).enemy('hopper', 165)
-  L.coins(160, 162, 7)
-
+// ---------------------------------------------------------------- 2. MARS DUNES: geysers and crumbling bridges
+function mars() {
+  const L = createLevel(205)
+  L.ground(0, 30).crumble(31, 37, 12).ground(38, 62).ground(67, 84).ground(89, 120).ground(133, 168).ground(172, 204)
+  L.decorate(10, 45, 74, 100, 140, 160, 180)
+  L.blocks(14, 8, '??').coins(31, 37, 10)
+  L.enemy('walker', 22)
+  L.pad(48).row(51, 60, 5, 'S').blocks(54, 5, 'P').coins(52, 59, 4)
+  L.enemy('hopper', 44).enemy('walker', 56, 4)
+  L.crumble(63, 66, 10)
+  L.enemy('walker', 72).enemy('walker', 78)
+  L.crumble(85, 88, 9).coins(85, 88, 8)
+  L.checkpoint = 92
+  L.pad(98).blocks(96, 8, 'B?B').row(102, 108, 4, 'B').coins(102, 108, 3)
+  L.pad(112).enemy('hopper', 105).enemy('flyer', 114, 5)
+  L.crumble(124, 125, 9).crumble(129, 130, 9).coins(124, 130, 7)
+  L.enemy('walker', 140).enemy('hopper', 148).pad(152).row(155, 160, 4, 'S').coins(155, 160, 3)
+  L.blocks(157, 8, '?P?').enemy('walker', 163)
+  L.crumble(169, 171, 11)
+  L.enemy('flyer', 178, 5).enemy('walker', 182)
   L.finish(190)
   return L
 }
 
-function level3() {
-  const L = createLevel(280)
-  L.ground(0, 25).ground(30, 45).ground(50, 70).ground(75, 90).ground(95, 110).ground(115, 135).ground(140, 279)
-  L.decorate(5, 20, 40, 60, 80, 100, 120, 140, 160, 180, 200)
-
-  // Level 3: Sunset Peaks
-  L.blocks(10, 8, '?P?')
-  L.enemy('walker', 15).enemy('hopper', 25)
-  L.coins(12, 14, 9)
-  
-  L.row(25, 30, 8, 'S').coins(27, 30, 7)
-  L.enemy('flyer', 33, 5)
-
-  L.row(35, 40, 8, 'S').coins(37, 40, 7)
-  L.enemy('walker', 38).enemy('hopper', 45)
-  
-  L.checkpoint = 65
-
-  L.blocks(70, 8, 'B?B?B')
-  L.enemy('walker', 75).enemy('hopper', 80).enemy('flyer', 90, 4)
-  L.coins(72, 74, 7)
-  
-  L.pipe(100, 2).pipe(107, 3)
-  L.blocks(115, 8, 'B?BP')
-  L.enemy('walker', 120).enemy('hopper', 128).enemy('flyer', 132, 5)
-
-  L.stairs(140, 4).stairs(146, 4, -1)
-  L.blocks(150, 8, 'BB')
-  L.enemy('walker', 153).enemy('hopper', 160).enemy('flyer', 165, 4)
-  L.coins(155, 157, 7)
-
-  L.pipe(175, 2).pipe(182, 3)
-  L.blocks(190, 8, 'B?P')
-  L.enemy('walker', 195).enemy('hopper', 200).enemy('flyer', 205, 5)
-
-  L.finish(225)
+// ---------------------------------------------------------------- 3. FROSTBITE COMET: slippery ice, tiny ledges
+function frost() {
+  const L = createLevel(210)
+  L.ground(0, 25).ground(30, 44).ground(49, 51).ground(56, 58).ground(63, 82).ground(87, 89).ground(94, 120)
+  L.ground(125, 127).ground(131, 133).ground(137, 160).ground(165, 209)
+  L.decorate(8, 36, 70, 100, 145, 175)
+  L.blocks(12, 8, 'B?B').coins(26, 29, 10)
+  L.enemy('walker', 38)
+  L.coins(49, 51, 10).coins(56, 58, 10)
+  L.stairs(66, 3).row(71, 73, 6, 'S').row(76, 78, 4, 'S').coins(76, 78, 3).stairs(79, 3, -1)
+  L.enemy('hopper', 70).enemy('flyer', 85, 6)
+  L.coins(87, 89, 9)
+  L.checkpoint = 96
+  L.pipe(100, 2).pipe(106, 3).pipe(112, 4).enemy('walker', 104).enemy('walker', 110)
+  L.blocks(103, 6, 'P')
+  L.row(121, 123, 9, 'S').coins(125, 127, 10).row(128, 129, 8, 'S').coins(131, 133, 10).row(134, 135, 9, 'S')
+  L.enemy('flyer', 130, 5)
+  L.blocks(142, 8, '?B?B?').enemy('hopper', 150).enemy('walker', 156)
+  L.row(161, 163, 9, 'S').coins(161, 163, 8)
+  L.enemy('walker', 172).enemy('hopper', 180).enemy('flyer', 186, 5)
+  L.finish(195)
   return L
 }
 
-// Order = play order. theme = index into config.themes.
-export const LEVELS = [
-  { name: 'GREEN HILLS', theme: 0, build: level1 },
-  { name: 'DEEP CAVE', theme: 1, build: level2 },
-  { name: 'SUNSET PEAKS', theme: 2, build: level3 },
-]
+// ---------------------------------------------------------------- 4. VERDANIA JUNGLE: moving platforms over goo
+function verdania() {
+  const L = createLevel(215)
+  L.ground(0, 24).lava(25, 46).ground(47, 72).lava(73, 94).ground(95, 122).lava(123, 150).ground(151, 214)
+  L.decorate(6, 14, 52, 66, 100, 116, 160, 175, 190)
+  L.blocks(12, 8, '?P?')
+  L.mover(27, 10, 3, 'x', 14, 0.55).coins(30, 40, 8)
+  L.enemy('walker', 55).pad(60).row(62, 68, 4, 'B').coins(62, 68, 3).enemy('walker', 66, 3)
+  L.enemy('flyer', 70, 5)
+  L.mover(75, 9, 2, 'x', 6, 0.6).mover(86, 8, 2, 'x', 5, 0.7)
+  L.checkpoint = 97
+  L.enemy('hopper', 104).blocks(106, 8, 'B?B').pad(112).row(114, 119, 4, 'S').coins(114, 119, 3)
+  L.enemy('walker', 118)
+  L.mover(124, 10, 2, 'x', 5, 0.6).mover(133, 7, 2, 'y', 3, 0.5).mover(137, 10, 2, 'x', 10, 0.7)
+  L.coins(133, 134, 5).enemy('flyer', 137, 4)
+  L.enemy('walker', 158).enemy('hopper', 166).blocks(170, 8, '?P?').enemy('walker', 176)
+  L.pad(182).row(184, 188, 5, 'B').coins(184, 188, 4)
+  L.enemy('flyer', 186, 3)
+  L.finish(200)
+  return L
+}
 
-// ---------------------------------------------------------------- validation (used by `npm run check`)
+// ---------------------------------------------------------------- 5. ASTEROID BELT: floating rocks, elevators, meteors
+function asteroids() {
+  const L = createLevel(210)
+  L.ground(0, 20).island(25, 30, 10).island(35, 39, 8).island(44, 52, 10).ground(56, 70)
+  L.island(75, 79, 9).island(84, 88, 7).island(93, 101, 10).ground(105, 122)
+  L.island(127, 133, 9).island(146, 151, 9).ground(156, 209)
+  L.decorate(150)
+  L.coins(25, 30, 9).coins(35, 39, 7).enemy('walker', 48, 9)
+  L.blocks(46, 6, 'P')
+  L.meteors(56, 125).enemy('hopper', 63).blocks(60, 8, 'B?B')
+  L.coins(84, 88, 6).enemy('flyer', 90, 4).enemy('walker', 97, 9)
+  L.checkpoint = 108
+  L.enemy('walker', 114).enemy('hopper', 119).blocks(112, 8, '?B?')
+  L.mover(136, 11, 2, 'y', 6, 0.5).mover(140, 5, 3, 'x', 4, 0.5).coins(140, 143, 4)
+  L.enemy('flyer', 138, 4)
+  L.meteors(156, 195).enemy('walker', 165).enemy('walker', 172).blocks(168, 8, '?P?').enemy('hopper', 180)
+  L.finish(195)
+  return L
+}
 
-const SOLID = new Set(['#', 'B', '?', 'P', 'U', 'S', '[', ']', '{', '}'])
+// ---------------------------------------------------------------- 6. ORBITAL STATION: conveyors and catwalks
+function station() {
+  const L = createLevel(215)
+  L.ground(0, 70).ground(75, 140).ground(145, 214)
+  L.row(10, 185, 0, 'B').row(10, 185, 1, 'B')
+  L.decorate(14, 60, 100, 150)
+  L.belt(14, 30, GROUND, 1).coins(16, 28, 10)
+  L.enemy('walker', 26).cloud(32, 40, 8).cloud(42, 50, 5).coins(42, 50, 4).enemy('walker', 46, 4)
+  L.belt(52, 70, GROUND, -1).enemy('walker', 62).blocks(58, 8, '?P?')
+  L.cloud(71, 74, 9)
+  L.pipe(80, 2).pipe(86, 3).enemy('hopper', 92).enemy('flyer', 96, 5)
+  L.checkpoint = 100
+  L.belt(104, 124, GROUND, -1).cloud(106, 112, 8).cloud(116, 122, 5).coins(116, 122, 4).enemy('walker', 110, 7)
+  L.blocks(114, 8, 'B?B').enemy('walker', 120)
+  L.cloud(136, 149, 8).coins(141, 144, 7)
+  L.belt(150, 170, GROUND, 1).cloud(151, 154, 9).enemy('hopper', 160).enemy('walker', 166).cloud(156, 164, 6).blocks(158, 3, 'P')
+  L.enemy('flyer', 176, 5)
+  L.finish(196)
+  return L
+}
 
-export function validateLevel(L, enemyTypes) {
+// ---------------------------------------------------------------- 7. MAGMARA: lava, crumbling bridges, fireball rain
+function magmara() {
+  const L = createLevel(215)
+  L.ground(0, 24).lava(25, 28).ground(29, 50).lava(51, 66).ground(67, 90).lava(91, 104).ground(105, 130)
+  L.lava(131, 146).ground(147, 214)
+  L.decorate(10, 40, 75, 115, 160, 180)
+  L.blocks(12, 8, '?P?').coins(25, 28, 9)
+  L.enemy('walker', 38).enemy('hopper', 45)
+  L.crumble(52, 54, 10).crumble(58, 60, 9).crumble(63, 65, 10).coins(58, 60, 8)
+  L.enemy('walker', 75).pad(80).row(82, 88, 4, 'B').coins(82, 88, 3).enemy('flyer', 86, 6)
+  L.meteors(67, 130)
+  L.crumble(92, 95, 10).crumble(99, 102, 10)
+  L.checkpoint = 107
+  L.blocks(110, 8, 'B?B?B').enemy('walker', 115).enemy('hopper', 122)
+  L.mover(133, 10, 2, 'x', 10, 0.6).crumble(138, 139, 7).coins(138, 139, 6)
+  L.enemy('walker', 155).enemy('walker', 160).blocks(163, 8, '?P?').enemy('hopper', 170)
+  L.meteors(150, 195).enemy('flyer', 178, 5)
+  L.finish(198)
+  return L
+}
+
+// ---------------------------------------------------------------- 8. NIMBUS GIANT: clouds and wind
+function nimbus() {
+  const L = createLevel(215)
+  L.ground(0, 16).cloud(20, 30, 12).cloud(34, 40, 10).cloud(44, 56, 12).cloud(60, 64, 9).cloud(68, 82, 11)
+  L.cloud(86, 90, 8).ground(94, 112).cloud(116, 126, 11).cloud(130, 134, 8).cloud(138, 150, 11)
+  L.cloud(154, 158, 9).cloud(162, 172, 12).ground(176, 214)
+  L.blocks(8, 8, '?P?').coins(20, 30, 11)
+  L.wind(20, 56, 0.6).enemy('flyer', 38, 6).enemy('walker', 50, 11)
+  L.coins(60, 64, 8).enemy('flyer', 66, 4)
+  L.wind(68, 92, -0.7).enemy('walker', 75, 10).coins(86, 90, 7)
+  L.checkpoint = 97
+  L.blocks(100, 8, 'B?B').enemy('hopper', 106)
+  L.wind(116, 172, 0.5).enemy('flyer', 120, 5).enemy('walker', 145, 10).enemy('flyer', 152, 4)
+  L.coins(130, 134, 7).coins(154, 158, 8).blocks(132, 4, 'P')
+  L.enemy('flyer', 168, 6).enemy('walker', 182)
+  L.finish(198)
+  return L
+}
+
+// ---------------------------------------------------------------- 9. PRISMA: crystal bounces, everything mixed
+function prisma() {
+  const L = createLevel(215)
+  L.ground(0, 22).lava(23, 34).ground(35, 60).ground(65, 80).lava(81, 98).ground(99, 125).ground(130, 145)
+  L.lava(146, 160).ground(161, 214)
+  L.decorate(8, 45, 70, 110, 140, 170, 185)
+  L.blocks(12, 8, '?P?')
+  L.pad(20).row(24, 26, 5, 'S').crumble(29, 31, 6).coins(24, 31, 4)
+  L.enemy('walker', 42).enemy('hopper', 50).pad(56).row(58, 63, 4, 'B').coins(58, 63, 3)
+  L.crumble(61, 64, 10)
+  L.enemy('flyer', 72, 5).enemy('walker', 76)
+  L.mover(82, 10, 2, 'x', 6, 0.7).pad(90, 9).row(89, 91, 10, 'S').mover(93, 7, 2, 'y', 3, 0.6).coins(93, 94, 4)
+  L.checkpoint = 102
+  L.belt(104, 118, GROUND, -1).enemy('walker', 110).enemy('hopper', 116).blocks(108, 8, 'B?P?B')
+  L.crumble(126, 129, 11).enemy('flyer', 135, 5)
+  L.crumble(147, 149, 10).crumble(153, 155, 9).crumble(158, 160, 10).coins(153, 155, 8)
+  L.enemy('walker', 168).enemy('walker', 174).pad(178).row(180, 186, 4, 'B').coins(180, 186, 3).enemy('hopper', 184, 3)
+  L.finish(198)
+  return L
+}
+
+// ---------------------------------------------------------------- 10. THE MOTHERSHIP: the final gauntlet
+function mothership() {
+  const L = createLevel(230)
+  L.ground(0, 26).lava(27, 40).ground(41, 70).lava(71, 86).ground(87, 118).lava(119, 140).ground(141, 168)
+  L.lava(169, 186).ground(187, 229)
+  L.row(12, 210, 0, 'B').row(12, 210, 1, 'B')
+  L.decorate(10, 50, 95, 150, 195)
+  L.blocks(14, 8, '?P?').enemy('walker', 22)
+  L.mover(29, 10, 2, 'x', 9, 0.75).coins(30, 39, 8)
+  L.belt(44, 60, GROUND, -1).enemy('hopper', 50).enemy('walker', 56).cloud(46, 54, 8).coins(46, 54, 7)
+  L.pad(65).row(62, 64, 5, 'B').blocks(66, 5, 'P').enemy('flyer', 68, 4)
+  L.crumble(72, 74, 10).crumble(78, 80, 9).crumble(84, 86, 10)
+  L.checkpoint = 90
+  L.enemy('walker', 96).enemy('walker', 100).enemy('hopper', 106).blocks(98, 8, 'B?B?B').belt(108, 118, GROUND, 1)
+  L.mover(121, 10, 2, 'x', 6, 0.8).mover(131, 7, 2, 'y', 3, 0.6).crumble(136, 139, 10).coins(131, 132, 4)
+  L.enemy('flyer', 128, 4).meteors(141, 168)
+  L.cloud(144, 150, 8).cloud(154, 160, 5).coins(154, 160, 4).enemy('hopper', 148).enemy('walker', 158).enemy('walker', 164)
+  L.pad(167).crumble(171, 173, 6).mover(176, 9, 2, 'x', 7, 0.8).crumble(184, 186, 10).coins(171, 173, 5)
+  L.enemy('flyer', 180, 4)
+  L.enemy('walker', 194).enemy('hopper', 200).blocks(197, 8, '?P?').enemy('flyer', 204, 5)
+  L.finish(214)
+  return L
+}
+
+// One level per planet, in order.
+export const LEVELS = [luna, mars, frost, verdania, asteroids, station, magmara, nimbus, prisma, mothership].map(
+  (build, i) => ({ planet: i, build }),
+)
+
+// ---------------------------------------------------------------- validation (npm run check)
+
+export const SOLID = new Set(['#', 'B', '?', 'P', 'U', 'S', '[', ']', '{', '}', 'C', 'J', '<', '>'])
+
+export function validateLevel(L, planet = {}) {
   const errors = []
   const warnings = []
-  const solid = (x, y) => y >= 0 && y < ROWS && x >= 0 && x < L.width && SOLID.has(L.tiles[y][x])
-  const standable = (x, y) => solid(x, y) && !solid(x, y - 1) && !solid(x, y - 2)
+  const g = planet.gravity || 1
+  const rise = Math.floor(4 / g + 0.05)
+  const reach = Math.min(8, Math.floor(5 / g + 0.05))
+  const padRise = Math.min(10, Math.floor(7 / g))
+  const at = (x, y) => (y >= 0 && y < ROWS && x >= 0 && x < L.width ? L.tiles[y][x] : '.')
+  const solid = (x, y) => SOLID.has(at(x, y))
+  const top = (x, y) => solid(x, y) || at(x, y) === '='
+  const standable = (x, y) => top(x, y) && !solid(x, y - 1) && !solid(x, y - 2)
 
-  if (L.width < 100 || L.width > 400) warnings.push(`width ${L.width} is unusual (100-400 works best)`)
-  if (!L.flagX) errors.push('missing L.finish(x) at the end of the level')
-  else if (L.houseX + 6 > L.width)
-    errors.push(`L.finish(${L.flagX - 12}) is too close to the end of this ${L.width}-wide level. Change it to L.finish(${L.width - 26}) (or smaller) and keep createLevel(${L.width})`)
-
-  const sx = L.start.x
-  if (!solid(sx, GROUND)) errors.push(`no ground under the player start (column ${sx})`)
-  if (solid(sx, GROUND - 1) || solid(sx, GROUND - 2)) errors.push(`player start (column ${sx}) is inside a block`)
+  if (L.width < 120 || L.width > 400) warnings.push(`width ${L.width} is unusual (120-400 works best)`)
+  if (!L.rocketX) errors.push('missing L.finish(x) at the end of the level')
+  else if (L.rocketX + 8 > L.width) errors.push(`L.finish(${L.rocketX - 2}) is too close to the end: use L.finish(${L.width - 12}) or smaller`)
+  for (let x = 0; x <= 6; x++) {
+    if (!solid(x, GROUND)) errors.push(`column ${x}: the rocket landing area (columns 0-6) needs ground`)
+    for (let y = 0; y < GROUND; y++) if (x <= 3 && solid(x, y)) errors.push(`column ${x}, row ${y}: the rocket needs empty sky above columns 0-3`)
+  }
   if (L.checkpoint != null && (!solid(L.checkpoint, GROUND) || solid(L.checkpoint, GROUND - 1)))
     errors.push(`checkpoint at column ${L.checkpoint} has no ground or is inside a block`)
 
-  // pits: any stretch of columns with nothing to stand on must be jumpable
-  let run = 0
-  for (let x = 0; x <= L.width; x++) {
-    let has = false
-    for (let y = 3; y <= GROUND; y++) if (x < L.width && standable(x, y)) has = true
-    if (has || x === L.width) {
-      if (run > 4) errors.push(`pit from column ${x - run} to ${x - 1} is ${run} tiles wide with nothing to stand on (max 4)`)
-      run = 0
-    } else run++
+  // surfaces, including moving platform paths
+  const surf = Array.from({ length: L.width }, () => new Map())
+  for (let x = 0; x < L.width; x++) for (let y = 1; y <= GROUND; y++) if (standable(x, y)) surf[x].set(y, at(x, y))
+  for (const m of L.movers) {
+    for (let s = 0; s <= m.range; s++) {
+      for (let i = 0; i < m.w; i++) {
+        const x = m.axis === 'x' ? m.x + s + i : m.x + i
+        const y = m.axis === 'y' ? m.y - s : m.y
+        if (x >= 0 && x < L.width && y > 0 && y <= GROUND) surf[x].set(y, 'M')
+      }
+    }
   }
 
-  // reachability: from the start, a jump reaches surfaces up to 4 rows higher and 5 columns away;
-  // falling down is always possible
-  const byCol = Array.from({ length: L.width }, () => [])
-  for (let x = 0; x < L.width; x++) for (let y = 1; y <= GROUND; y++) if (standable(x, y)) byCol[x].push(y)
-  const key = (x, y) => y * 10000 + x
-  const seen = new Set()
-  const queue = []
-  if (solid(sx, GROUND)) {
-    seen.add(key(sx, GROUND))
-    queue.push([sx, GROUND])
+  // pits
+  const maxPit = Math.floor(4 / g + 0.05)
+  let run = 0
+  for (let x = 0; x <= L.width; x++) {
+    if (x < L.width && surf[x].size === 0) run++
+    else {
+      if (run > maxPit) errors.push(`gap from column ${x - run} to ${x - 1} is ${run} tiles wide with nothing to stand on (max ${maxPit} here)`)
+      run = 0
+    }
   }
+
+  // reachability from the start
+  const key = (x, y) => y * 10000 + x
+  const seen = new Set([key(L.start.x, GROUND)])
+  const queue = [[L.start.x, GROUND]]
   while (queue.length) {
     const [x, y] = queue.pop()
-    for (let nx = Math.max(0, x - 5); nx <= Math.min(L.width - 1, x + 5); nx++) {
-      for (const ny of byCol[nx]) {
-        if (y - ny > 4 || seen.has(key(nx, ny))) continue
-        // can't jump up through a ceiling right above you
-        if (ny < y && solid(x, y - 3) && Math.abs(nx - x) <= 1) continue
+    const up = surf[x].get(y) === 'J' ? padRise : rise
+    const r = surf[x].get(y) === 'J' ? reach + 2 : reach
+    for (let nx = Math.max(0, x - r); nx <= Math.min(L.width - 1, x + r); nx++) {
+      for (const ny of surf[nx].keys()) {
+        if (y - ny > up || seen.has(key(nx, ny))) continue
+        if (ny < y - 1 && Math.abs(nx - x) <= 1 && solid(x, y - 3)) continue
         seen.add(key(nx, ny))
         queue.push([nx, ny])
       }
     }
   }
   const unreachable = []
-  for (let x = 0; x < L.width; x++) for (const y of byCol[x]) if (y < GROUND && !seen.has(key(x, y))) unreachable.push([x, y])
+  for (let x = 0; x < L.width; x++) for (const y of surf[x].keys()) if (!seen.has(key(x, y)) && surf[x].get(y) !== 'M') unreachable.push([x, y])
   const reported = []
-  for (let i = 0; i < unreachable.length; i++) {
-    const [x, y] = unreachable[i]
-    if (i > 0 && unreachable[i - 1][1] === y && unreachable[i - 1][0] === x - 1) continue // report each platform once
-    reported.push(`platform at column ${x}, row ${y} can't be reached (more than 4 rows above anything within 5 columns)`)
-  }
+  unreachable.forEach(([x, y], i) => {
+    if (i > 0 && unreachable[i - 1][1] === y && unreachable[i - 1][0] === x - 1) return
+    reported.push(`platform at column ${x}, row ${y} can't be reached`)
+  })
   warnings.push(...reported.slice(0, 5))
   if (reported.length > 5) warnings.push(`...and ${reported.length - 5} more unreachable platforms`)
-  if (L.flagX) {
-    const lastStair = L.flagX - 5
-    if (!byCol[lastStair]?.some((y) => seen.has(key(lastStair, y))))
-      errors.push(`the end of the level (column ${lastStair}) can't be reached from the start: check pits and walls before it`)
-  }
+  if (L.rocketX && ![...surf[L.rocketX].keys()].some((y) => seen.has(key(L.rocketX, y))))
+    errors.push(`the rocket at column ${L.rocketX} can't be reached from the start`)
 
   for (let x = 0; x < L.width; x++) {
     for (let y = 1; y < ROWS; y++) {
@@ -295,7 +450,6 @@ export function validateLevel(L, enemyTypes) {
       if ((t === '?' || t === 'P') && solid(x, y + 1)) warnings.push(`item block at column ${x}, row ${y} can't be hit from below`)
     }
   }
-
   for (const e of L.entities) {
     if (e.x < 0 || e.x >= L.width || e.y < 0 || e.y >= ROWS) {
       errors.push(`${e.type} at column ${e.x}, row ${e.y} is outside the level`)
@@ -303,20 +457,14 @@ export function validateLevel(L, enemyTypes) {
     }
     if (solid(e.x, e.y)) errors.push(`${e.kind || e.type} at column ${e.x}, row ${e.y} is inside a block`)
     if (e.type === 'enemy') {
-      const def = enemyTypes[e.kind]
-      if (!def) {
-        errors.push(`unknown enemy type '${e.kind}' at column ${e.x} (use one of: ${Object.keys(enemyTypes).join(', ')})`)
-        continue
-      }
-      if (def.behavior !== 'fly') {
+      if (!['walker', 'hopper', 'flyer'].includes(e.kind)) errors.push(`unknown enemy role '${e.kind}' at column ${e.x}`)
+      else if (e.kind !== 'flyer') {
         let floor = false
-        for (let y = e.y + 1; y < ROWS; y++) if (solid(e.x, y)) floor = true
-        if (!floor) warnings.push(`${e.kind} at column ${e.x} has no floor under it and will fall into a pit`)
-      } else if (e.y > 9) warnings.push(`flying ${e.kind} at column ${e.x} is very low (use row 3-7)`)
+        for (let y = e.y + 1; y < ROWS; y++) if (top(e.x, y)) floor = true
+        if (!floor) warnings.push(`${e.kind} at column ${e.x} has no floor under it`)
+      } else if (e.y > 9) warnings.push(`flyer at column ${e.x} is very low (use row 3-7)`)
       if (Math.abs(e.x - L.start.x) < 8) warnings.push(`${e.kind} at column ${e.x} is very close to the start`)
     }
   }
-  if (!L.entities.some((e) => e.type === 'enemy')) warnings.push('no enemies in this level')
-  if (L.entities.filter((e) => e.type === 'coin').length < 10) warnings.push('fewer than 10 collectibles')
   return { errors, warnings }
 }

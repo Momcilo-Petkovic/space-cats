@@ -11,7 +11,7 @@ export function makeCanvas(w, h) {
   return c
 }
 
-function paint(rows, pal, flip = false) {
+export function paint(rows, pal, flip = false) {
   const h = rows.length
   const w = rows[0].length
   const c = makeCanvas(w, h)
@@ -27,7 +27,7 @@ function paint(rows, pal, flip = false) {
   return c
 }
 
-function rng(seed) {
+export function rng(seed) {
   let s = seed >>> 0
   return () => {
     s = (s * 1664525 + 1013904223) >>> 0

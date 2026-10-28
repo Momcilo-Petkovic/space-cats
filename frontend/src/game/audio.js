@@ -1,4 +1,4 @@
-// Chiptune sound effects and a laid-back reggae loop, generated with the Web Audio API.
+// Chiptune sound effects and a laid-back space-reggae loop, generated with the Web Audio API.
 
 const NOTE = (n) => 440 * Math.pow(2, (n - 69) / 12) // MIDI note -> Hz
 
@@ -81,6 +81,21 @@ export class Audio {
       case 'tick': this.tone(1760, 1760, 0.03, 'square', 0.06); break
       case 'pause': this.tone(660, 660, 0.06, 'square', 0.12); this.tone(990, 990, 0.08, 'square', 0.12, 0.08); break
       case 'gameover': [67, 64, 60, 55, 52, 48].forEach((n, i) => this.tone(NOTE(n), NOTE(n), 0.22, 'triangle', 0.25, i * 0.22)); break
+      case 'boing': this.tone(160, 900, 0.3, 'triangle', 0.3); this.tone(320, 1400, 0.18, 'square', 0.06); break
+      case 'select': this.tone(880, 880, 0.05, 'square', 0.1); break
+      case 'confirm': [72, 79, 84].forEach((n, i) => this.tone(NOTE(n), NOTE(n), 0.08, 'square', 0.12, i * 0.06)); break
+      case 'door': this.hiss(0.25, 0.12, 0, 2500); this.tone(300, 500, 0.2, 'triangle', 0.15); break
+      case 'launch': this.hiss(2.2, 0.35, 0, 300); this.tone(60, 240, 2.2, 'sawtooth', 0.12); break
+      case 'land': this.hiss(0.6, 0.25, 0, 300); this.tone(200, 50, 0.5, 'triangle', 0.25); break
+      case 'warn': this.tone(1200, 1200, 0.05, 'square', 0.08); this.tone(900, 900, 0.05, 'square', 0.08, 0.08); break
+      case 'boom': this.hiss(0.35, 0.35, 0, 200); this.tone(110, 30, 0.3, 'triangle', 0.4); break
+      case 'crumble': this.hiss(0.2, 0.15, 0, 800); break
+      case 'beam': [84, 88, 91, 96].forEach((n, i) => this.tone(NOTE(n), NOTE(n), 0.1, 'sine', 0.15, i * 0.06)); break
+      case 'splash': this.hiss(0.3, 0.3, 0, 600); this.tone(300, 80, 0.25, 'sine', 0.3); break
+      case 'victory':
+        [60, 64, 67, 72, 67, 72, 76, 79, 84].forEach((n, i) => this.tone(NOTE(n), NOTE(n), 0.16, 'square', 0.13, i * 0.13))
+        ;[48, 55, 60].forEach((n, i) => this.tone(NOTE(n), NOTE(n), 0.9, 'triangle', 0.25, 1.2 + i * 0.02))
+        break
       default: break
     }
   }
