@@ -1,0 +1,7 @@
+{
+  "character": "player",
+  "sheet": "C:\\Programming\\space-cats\\frontend\\public\\sprites\\player\\player_sheet.png",
+  "animation": "C:\\Programming\\space-cats\\frontend\\public\\sprites\\player\\player.json",
+  "preview": "C:\\Programming\\space-cats\\frontend\\public\\sprites\\player\\player_preview.png",
+  "issues": []
+}

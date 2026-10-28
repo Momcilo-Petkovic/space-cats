@@ -1,0 +1,17 @@
+{
+  "character": "flyer",
+  "sheet": "C:\\Programming\\space-cats\\frontend\\public\\sprites\\flyer\\flyer_sheet.png",
+  "animation": "C:\\Programming\\space-cats\\frontend\\public\\sprites\\flyer\\flyer.json",
+  "preview": "C:\\Programming\\space-cats\\frontend\\public\\sprites\\flyer\\flyer_preview.png",
+  "issues": [],
+  "seed": 7818531172018,
+  "check": {
+    "same_character": true,
+    "matches_description": true,
+    "broken_frames": [],
+    "score": 10,
+    "reason": "All frames are consistent, match the intended character design, and show no issues.",
+    "pass": true,
+    "model": "qwen3-vl:8b"
+  }
+}

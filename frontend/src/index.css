@@ -1,0 +1,17 @@
+:root {
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  color: #e8e0f5;
+  background: #0f0a1c;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(ellipse at top, rgba(155, 229, 100, 0.08), transparent 60%),
+    #0f0a1c;
+}
+
+#root {
+  min-height: 100vh;
+}

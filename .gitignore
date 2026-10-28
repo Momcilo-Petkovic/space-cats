@@ -1,0 +1,8 @@
+# Local secrets: never commit these
+backend/src/main/resources/application-local.properties
+init-db.sql
+.env
+
+# Build output
+frontend/dist/
+backend/target/
