@@ -4,11 +4,20 @@ A 2D pixel-art co-op platformer: one or two cat astronauts hop out of their rock
 each with its own gravity, hazards and aliens, to get back the last can of SPACE MEOW.
 React + Vite on the frontend, Spring Boot + MariaDB for the high-score list.
 
+## ▶ [Play it online: space-cats-momcilo.netlify.app](https://space-cats-momcilo.netlify.app/)
+
+No install needed, it runs right in your browser. The leaderboard can take up to a minute to show up
+on the first visit while the free backend server wakes up.
+
 ![Space Cats screenshot](docs/screenshot.png)
 
 ## Play it
 
-### Option 1: Docker (one command, nothing else to install)
+### Option 1: Online
+
+Just open **https://space-cats-momcilo.netlify.app/**. Scores you save go on the shared online leaderboard.
+
+### Option 2: Docker (one command, nothing else to install)
 
 Needs [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
@@ -19,7 +28,7 @@ docker compose up --build
 Open http://localhost:8000. Docker starts MariaDB, the backend and the game together.
 Stop with `Ctrl+C`; scores are kept between runs.
 
-### Option 2: Run it yourself
+### Option 3: Run it yourself
 
 Needs Node.js 22+, Java 21 and MariaDB.
 
@@ -91,6 +100,36 @@ original three aliens. `tools\generate-aliens.bat tux` also redraws Tux with a c
 completable (no gaps too wide for that planet's gravity, the rocket reachable from the start, and so on),
 then it builds the game.
 
+## Hosting
+
+The online version runs entirely on free tiers:
+
+| Part | Host | Notes |
+|---|---|---|
+| Game (React build) | [Netlify](https://www.netlify.com/) | builds `frontend` on every push to `main` |
+| Score API (Spring Boot) | [Render](https://render.com/) | Docker web service from `backend/Dockerfile`; sleeps after 15 min idle |
+| Database | [Aiven](https://aiven.io/) | free MySQL service |
+
+The game calls `/api/game/...` with a relative path, and `frontend/public/_redirects` tells Netlify
+to forward those calls to the Render backend, so no CORS setup is needed.
+
+To host your own copy:
+
+1. **Aiven**: create a free MySQL service and note its host, port, user and password.
+2. **Render**: New Web Service from this repo, runtime Docker, root directory `backend`, free instance, with these environment variables:
+
+   | Key | Value |
+   |---|---|
+   | `DB_URL` | `jdbc:mysql://<host>:<port>/defaultdb?sslMode=REQUIRED` |
+   | `DB_DRIVER` | `com.mysql.cj.jdbc.Driver` |
+   | `DB_USER` / `DB_PASSWORD` | your Aiven login |
+   | `JAVA_TOOL_OPTIONS` | `-Xmx300m -XX:+UseSerialGC` (fits the 512 MB free instance) |
+
+3. **Netlify**: import this repo with base directory `frontend`, build command `npm run build`,
+   publish directory `frontend/dist`. Change the Render URL in `frontend/public/_redirects` to your own service.
+
+Locally nothing changes: without `DB_URL` the backend still uses MariaDB on localhost.
+
 ## How it was made
 
 The game was built with a local, offline AI pipeline on a laptop (RTX 4070, 8 GB) plus Claude:
@@ -102,7 +141,8 @@ The game was built with a local, offline AI pipeline on a laptop (RTX 4070, 8 GB
   first version's config and levels, guided by an instruction file and the automatic level checker.
 - **Sprites**: generated locally with ComfyUI using FLUX.2 [klein] 4B and a pixel-art sprite-sheet LoRA,
   then cleaned up, color-locked and sliced into animation frames by a script. A local vision model
-  (Qwen3-VL 8B) checks each sheet and regenerates bad ones.
+  (Qwen3-VL 8B) checks each sheet and regenerates bad ones. Tux's and Smokey's visors were repainted
+  afterwards so their cat faces show through the glass.
 
 ## Credits
 
