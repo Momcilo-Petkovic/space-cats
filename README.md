@@ -6,8 +6,8 @@ React + Vite on the frontend, Spring Boot + MariaDB for the high-score list.
 
 ## ▶ [Play it online: space-cats-momcilo.netlify.app](https://space-cats-momcilo.netlify.app/)
 
-No install needed, it runs right in your browser. The leaderboard can take up to a minute to show up
-on the first visit while the free backend server wakes up.
+No install needed, it runs right in your browser. Online, your high scores are saved in your browser.
+The shared leaderboard (Spring Boot + MariaDB) runs when you start the full project with Docker or locally.
 
 ![Space Cats screenshot](docs/screenshot.png)
 
@@ -15,7 +15,7 @@ on the first visit while the free backend server wakes up.
 
 ### Option 1: Online
 
-Just open **https://space-cats-momcilo.netlify.app/**. Scores you save go on the shared online leaderboard.
+Just open **https://space-cats-momcilo.netlify.app/**. Scores you save are kept in your browser.
 
 ### Option 2: Docker (one command, nothing else to install)
 
@@ -102,33 +102,31 @@ then it builds the game.
 
 ## Hosting
 
-The online version runs entirely on free tiers:
+The online version is the React build on [Netlify](https://www.netlify.com/), rebuilt on every push to `main`.
+It runs without a backend: when the score API doesn't answer, the game keeps the top 10 scores in
+`localStorage`, so nothing breaks and players still see their best runs.
 
-| Part | Host | Notes |
-|---|---|---|
-| Game (React build) | [Netlify](https://www.netlify.com/) | builds `frontend` on every push to `main` |
-| Score API (Spring Boot) | [Render](https://render.com/) | Docker web service from `backend/Dockerfile`; sleeps after 15 min idle |
-| Database | [Aiven](https://aiven.io/) | free MySQL service |
-
-The game calls `/api/game/...` with a relative path, and `frontend/public/_redirects` tells Netlify
-to forward those calls to the Render backend, so no CORS setup is needed.
+The Spring Boot score API and the database are still part of the project and power the shared leaderboard
+when you run it with Docker or locally. Until November 2026 the online version also used them, with the API
+on Render and the database on Aiven's free MySQL plan. When Aiven announced it was retiring that plan, I chose
+to keep the demo on a single free host rather than depend on three.
 
 To host your own copy:
 
-1. **Aiven**: create a free MySQL service and note its host, port, user and password.
-2. **Render**: New Web Service from this repo, runtime Docker, root directory `backend`, free instance, with these environment variables:
+1. **Netlify**: import this repo with base directory `frontend`, build command `npm run build` and
+   publish directory `frontend/dist`. That's all the game needs.
+2. **Optional shared leaderboard**: deploy `backend` (it has a `Dockerfile`) to any host that runs Docker,
+   point it at a MySQL or MariaDB database with these environment variables, and add a file
+   `frontend/public/_redirects` containing `/api/*  https://<your-backend>/api/:splat  200` so Netlify
+   forwards score requests to it.
 
    | Key | Value |
    |---|---|
-   | `DB_URL` | `jdbc:mysql://<host>:<port>/defaultdb?sslMode=REQUIRED` |
+   | `DB_URL` | `jdbc:mysql://<host>:<port>/<database>` (add `?sslMode=REQUIRED` if the host needs SSL) |
    | `DB_DRIVER` | `com.mysql.cj.jdbc.Driver` |
-   | `DB_USER` / `DB_PASSWORD` | your Aiven login |
-   | `JAVA_TOOL_OPTIONS` | `-Xmx300m -XX:+UseSerialGC` (fits the 512 MB free instance) |
+   | `DB_USER` / `DB_PASSWORD` | your database login |
 
-3. **Netlify**: import this repo with base directory `frontend`, build command `npm run build`,
-   publish directory `frontend/dist`. Change the Render URL in `frontend/public/_redirects` to your own service.
-
-Locally nothing changes: without `DB_URL` the backend still uses MariaDB on localhost.
+Locally nothing changes: without `DB_URL` the backend uses MariaDB on localhost.
 
 ## How it was made
 

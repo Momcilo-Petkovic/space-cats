@@ -132,7 +132,7 @@ function App() {
               </p>
               {saveState === 'saved' || saveState === 'local' ? (
                 <p className="ok">
-                  {saveState === 'saved' ? 'Score saved to the leaderboard.' : 'Score saved in this browser (the leaderboard server is offline).'}
+                  {saveState === 'saved' ? 'Score saved to the leaderboard.' : 'Score saved in this browser.'}
                 </p>
               ) : (
                 <form onSubmit={saveScore}>
@@ -181,7 +181,7 @@ function App() {
         <section className="panel">
           <h3>High scores</h3>
           {scores === null && <p className="hint">Loading…</p>}
-          {offline && <p className="hint">Leaderboard server offline: scores are kept in this browser.</p>}
+          {offline && <p className="hint">Your best runs, saved in this browser.</p>}
           {Array.isArray(scores) && scores.length === 0 && <p className="hint">No scores yet. Be the first!</p>}
           {Array.isArray(scores) && scores.length > 0 && (
             <ol className="scores">
